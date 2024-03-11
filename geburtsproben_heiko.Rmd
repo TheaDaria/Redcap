@@ -1,0 +1,57 @@
+---
+title: "REDCap2R"
+author: "FG"
+date: "28 9 2021"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(REDCapR)
+library(gtools)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+library(writexl)
+```
+
+# read only the form fragen_zu_covid19_erkrankung und field maternal_id
+
+```{r}
+biosamples.birth <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+forms = "p_geburt_biosamples",
+fields = "maternal_id",
+events = "t3_birth_arm_1"
+)$data %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance"))
+
+```
+
+```{r}
+biosample.dna <- biosamples.birth %>%
+  filter(p_bloodcollected___3 == 1) %>%
+  rename(Paxgene_DNA = p_bloodcollected___3) %>%
+  select(maternal_id, redcap_event_name, Paxgene_DNA)
+```
+
+
+```{r}
+biosample.saliva <- biosamples.birth %>%
+  filter(p_saliva == 1) %>%
+  select(maternal_id, redcap_event_name, p_saliva)
+```
+
+
+```{r}
+biosample.dna.saliva <- biosamples.birth %>%
+  filter(p_bloodcollected___3 == 1 | p_saliva == 1) %>%
+  rename(p_blood_pax = p_bloodcollected___3) %>%
+  select(maternal_id, redcap_event_name, p_blood_pax, p_saliva) %>%
+  write_xlsx(path = "output/biosamples_heiko_dnapax_saliva.xlsx", col_names = TRUE)
+```
+

@@ -1,0 +1,399 @@
+---
+title: "Ethics Advisory Board 11/2022"
+author: "FG"
+date: "15 11 2022"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(REDCapR)
+library(gtools)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+library(writexl)
+library(ggsci)
+library(readr) # loads read_csv
+library(stringr)
+```
+
+```{r}
+uri="https://redcap.charite.de/cru/api/"
+token='6FD30683ACBA439FA03060E3DEC67881'
+```
+
+# dropout 
+## get redcap
+```{r}
+redcap.dropout.raw <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+fields = c("maternal_id",
+           "redcap_event_name", 
+           "dropout", 
+           "dropout_whichvisit",
+           "dropout_why", 
+           "studyparticipation", 
+           "studyparticipation_ct",
+           "studyparticipation_k2h"),
+)$data  %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance")) %>%
+  dplyr::filter(.,!grepl("test|^2|^3|^4", maternal_id)) 
+
+```
+
+
+## dropout list
+```{r}
+dropout <- redcap.dropout.raw %>%
+  filter(redcap_event_name == "t1a_arm_1") %>%
+  filter(dropout %in% "1") %>%
+  filter(dropout_whichvisit<=7) %>%
+  mutate(dropout_T1a = ifelse(dropout_whichvisit %in% "1", "1", "0")) %>%
+  mutate(dropout_T1b = ifelse(dropout_whichvisit %in% "2", "1", "0")) %>%
+  mutate(dropout_TM = ifelse(dropout_whichvisit %in% "3", "1", "0")) %>%
+  mutate(dropout_T2 = ifelse(dropout_whichvisit %in% "4", "1", "0")) %>%
+  mutate(dropout_T3 = ifelse(dropout_whichvisit %in% "5", "1", "0")) %>%
+  mutate(dropout_M1 = ifelse(dropout_whichvisit %in% "6", "1", "0")) %>%
+  mutate(dropout_nach_M6 = ifelse(dropout_whichvisit %in% "7", "1", "0")) %>%
+  dplyr::select(c(maternal_id, dropout_T1a, dropout_T1b, dropout_TM, dropout_T2, dropout_T3, dropout_M1)) #%>%
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE))
+  
+  
+ct.participants <- redcap.dropout.raw %>% 
+  filter(redcap_event_name == "t1a_arm_1") %>%
+  dplyr::select(-c(studyparticipation___1, studyparticipation___3, studyparticipation___5, dropout_why, redcap_event_name)) %>%
+  mutate(CT = ifelse((studyparticipation___2 %in% "1" | studyparticipation___4 %in% "1"), "1", "0")) %>%
+  filter(CT %in% "1") %>%
+  mutate("CT.p" = ifelse(c(studyparticipation_ct %in% "1" | studyparticipation_k2h %in% "1"), "1", "0")) %>%
+  mutate("CT.m" = ifelse(c(studyparticipation_ct %in% "2" | studyparticipation_k2h %in% "2"), "1", "0")) %>%
+  mutate("CTmid" = ifelse(studyparticipation_ct %in% "4", "1", "0")) %>%
+  mutate("not_eligible" = ifelse(c(studyparticipation_ct %in% "3" | studyparticipation_k2h %in% "3"), "1", "0")) #%>%
+  dplyr::select(c(maternal_id, CT.p, CT.m, CTmid))
+
+CT.dropouts <- dropout %>%
+  inner_join(ct.participants, by = "maternal_id") #%>%
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE))
+  
+CT.excl.dropout <- ct.participants %>%
+  anti_join(CT.dropouts)
+```
+
+
+# Type of Trauma
+
+## get redcap CTQ
+```{r}
+redcap.trauma.raw <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+fields = c("maternal_id",
+           "redcap_event_name"),
+forms = c("ctq_scoring",
+          "fragen_zu_erfahrungen_in_ihrer_kindheit_und_jugend"),
+)$data  %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance")) %>%
+  dplyr::filter(.,!grepl("test|^2|^3|^4", maternal_id)) 
+
+```
+
+```{r}
+trauma <- redcap.trauma.raw %>%
+  filter(redcap_event_name %in% "t1a_arm_1") %>%
+  dplyr::select(c(maternal_id, ctq_emotabuse_missincl, ctq_emotabuse_missexcl, ctq_physabuse_missincl, ctq_physabuse_missexcl, ctq_sexabuse_missincl, ctq_sexabuse_missexcl, ctq_emneg_missincl, ctq_emneg_missexcl, ctq_physneg_missincl, ctq_physneg_missexcl)) %>%
+  mutate(
+    CTQ_EA = ifelse(ctq_emotabuse_missexcl >= 13, "1", "0"),
+    CTQ_EA_miss = ifelse(ctq_emotabuse_missincl >= 13, "1", "0"),
+    CTQ_PA = ifelse(ctq_physabuse_missexcl >= 10, "1", "0"),
+    CTQ_PA_miss = ifelse(ctq_physabuse_missincl >= 10, "1", "0"),
+    CTQ_SA = ifelse(ctq_sexabuse_missexcl >= 8, "1", "0"),
+    CTQ_SA_miss = ifelse(ctq_sexabuse_missincl >= 8, "1", "0"),
+    CTQ_EN = ifelse(ctq_emneg_missexcl >= 15, "1", "0"),
+    CTQ_EN_miss = ifelse(ctq_emneg_missincl >= 15, "1", "0"),
+    CTQ_PN = ifelse(ctq_physneg_missexcl >= 10, "1", "0"),
+    CTQ_PN_miss = ifelse(ctq_physneg_missincl >= 10, "1", "0")
+    ) %>%
+  dplyr::select(c(CTQ_EA, CTQ_EA_miss, CTQ_PA, CTQ_PA_miss, CTQ_SA, CTQ_SA_miss, CTQ_EN, CTQ_EN_miss, CTQ_PN, CTQ_PN_miss)) %>%
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE)) 
+
+write.csv(trauma, "trauma_type_inkl_dropout.csv", row.names = FALSE)
+
+
+
+
+trauma.dropout <- redcap.trauma.raw %>%
+  filter(redcap_event_name %in% "t1a_arm_1") %>%
+  dplyr::select(c(maternal_id, ctq_emotabuse_missincl, ctq_emotabuse_missexcl, ctq_physabuse_missincl, ctq_physabuse_missexcl, ctq_sexabuse_missincl, ctq_sexabuse_missexcl, ctq_emneg_missincl, ctq_emneg_missexcl, ctq_physneg_missincl, ctq_physneg_missexcl)) %>%
+  mutate(
+    CTQ_EA = ifelse(ctq_emotabuse_missexcl >= 13, "1", "0"),
+    CTQ_EA_miss = ifelse(ctq_emotabuse_missincl >= 13, "1", "0"),
+    CTQ_PA = ifelse(ctq_physabuse_missexcl >= 10, "1", "0"),
+    CTQ_PA_miss = ifelse(ctq_physabuse_missincl >= 10, "1", "0"),
+    CTQ_SA = ifelse(ctq_sexabuse_missexcl >= 8, "1", "0"),
+    CTQ_SA_miss = ifelse(ctq_sexabuse_missincl >= 8, "1", "0"),
+    CTQ_EN = ifelse(ctq_emneg_missexcl >= 15, "1", "0"),
+    CTQ_EN_miss = ifelse(ctq_emneg_missincl >= 15, "1", "0"),
+    CTQ_PN = ifelse(ctq_physneg_missexcl >= 10, "1", "0"),
+    CTQ_PN_miss = ifelse(ctq_physneg_missincl >= 10, "1", "0")
+    ) %>%
+  anti_join(dropout, by = "maternal_id") %>%
+  dplyr::select(c(CTQ_EA, CTQ_EA_miss, CTQ_PA, CTQ_PA_miss, CTQ_SA, CTQ_SA_miss, CTQ_EN, CTQ_EN_miss, CTQ_PN, CTQ_PN_miss)) %>%
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE))
+
+write.csv(trauma.dropout, "trauma_type_exkl_dropout.csv", row.names = FALSE)
+  
+```
+
+```{r}
+trauma2 <- redcap.trauma.raw %>%
+  filter(redcap_event_name %in% "t1a_arm_1") %>%
+  mutate(CTQ_EA = ctq_3_ea_insulted + ctq_8_ea_neverborn + ctq_14_ea_hurtfulthings + ctq_18_ea_hatedinfamily + ctq_25_ea_emotionalabuse) %>%
+  mutate(CTQ_PA = ctq_9_pa_hospitalfromhit + ctq_11_pa_bruised + ctq_12_pa_corppunish + ctq_15_pa_physicalabuse + ctq_17_pa_hitnoticed) %>%
+  mutate(CTQ_SA = ctq_20_sa_sexualtouch + ctq_21_sa_threatsexual + ctq_23_sa_sexabuseattempt + ctq_24_sa_molested + ctq_27_sa_sexualabuse) %>%
+  mutate(CTQ_EA_cat = ifelse(CTQ_EA >= 13, "1", "0")) %>%
+  mutate(CTQ_PA_cat = ifelse(CTQ_PA >= 10, "1", "0")) %>%
+  mutate(CTQ_SA_cat = ifelse(CTQ_SA >= 8, "1", "0")) %>%
+  dplyr::select(maternal_id, CTQ_EA, CTQ_PA, CTQ_SA) %>%
+  anti_join(dropout, by = "maternal_id") #%>%
+  dplyr::select(- maternal_id) %>%
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE))
+
+# count moderate cut-off (3) und ohne dropouts
+trauma.mod1 <- redcap.trauma.raw %>%
+  filter(redcap_event_name %in% "t1a_arm_1") %>%
+  dplyr::select(c(maternal_id, ctq_emabuse_cat_mod, ctq_emabuse_cat_sev, ctq_physabuse_cat_mod, ctq_physabuse_cat_sev, ctq_sexabuse_cat_mod, ctq_sexabuse_cat_sev, ctq_emneg_cat_mod, ctq_emneg_cat_sev, ctq_physneg_cat_mod, ctq_physneg_cat_sev)) %>%
+  anti_join(dropout, by = "maternal_id") %>%
+  dplyr::select(- maternal_id) %>%
+  summarize_all(~ sum(str_count(., "3"), na.rm=TRUE))
+  
+# count moderate cut-off (3) und inkl dropouts
+trauma.mod2 <- redcap.trauma.raw %>%
+  filter(redcap_event_name %in% "t1a_arm_1") %>%
+  dplyr::select(c(maternal_id, ctq_emabuse_cat_mod, ctq_emabuse_cat_sev, ctq_physabuse_cat_mod, ctq_physabuse_cat_sev, ctq_sexabuse_cat_mod, ctq_sexabuse_cat_sev, ctq_emneg_cat_mod, ctq_emneg_cat_sev, ctq_physneg_cat_mod, ctq_physneg_cat_sev)) %>%
+  dplyr::select(- maternal_id) %>%
+  summarize_all(~ sum(str_count(., "3"), na.rm=TRUE))
+
+# count severe cut-off (4) und ohne dropouts
+trauma.sev1 <- redcap.trauma.raw %>%
+  filter(redcap_event_name %in% "t1a_arm_1") %>%
+  dplyr::select(c(maternal_id, ctq_emabuse_cat_mod, ctq_emabuse_cat_sev, ctq_physabuse_cat_mod, ctq_physabuse_cat_sev, ctq_sexabuse_cat_mod, ctq_sexabuse_cat_sev, ctq_emneg_cat_mod, ctq_emneg_cat_sev, ctq_physneg_cat_mod, ctq_physneg_cat_sev)) %>%
+  anti_join(dropout, by = "maternal_id") #%>%
+  dplyr::select(- maternal_id) %>%
+  summarize_all(~ sum(str_count(., "3"), na.rm=TRUE))
+  
+# count severe cut-off (4) inkl dropouts
+trauma.sev2 <- redcap.trauma.raw %>%
+  filter(redcap_event_name %in% "t1a_arm_1") %>%
+  dplyr::select(c(maternal_id, ctq_emabuse_cat_mod, ctq_emabuse_cat_sev, ctq_physabuse_cat_mod, ctq_physabuse_cat_sev, ctq_sexabuse_cat_mod, ctq_sexabuse_cat_sev, ctq_emneg_cat_mod, ctq_emneg_cat_sev, ctq_physneg_cat_mod, ctq_physneg_cat_sev)) #%>%
+  dplyr::select(- maternal_id) %>%
+  summarize_all(~ sum(str_count(., "3"), na.rm=TRUE))
+```
+
+## get redcap CTI
+```{r}
+redcap.trauma.CTI.raw <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+fields = c("maternal_id",
+           "redcap_event_name"),
+forms = c("cti_clinical_assessment"),
+)$data  %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance")) %>%
+  dplyr::filter(.,!grepl("test|^2|^3|^4", maternal_id))
+```
+
+## count trauma types
+```{r}
+# # count severe cut-off (4) without dropouts
+trauma.CTI1 <- redcap.trauma.CTI.raw %>%
+  filter(redcap_event_name == "t1b_arm_1") %>%
+  dplyr::select(c(maternal_id, cti_ca_12_pa, cti_ca_12_pa_severity, cti_ca_12_sa, cti_ca_12_sa_severity, cti_ca_12_ea, cti_ca_12_ea_severity)) %>%
+  anti_join(CT.dropouts, by = "maternal_id") %>%
+  mutate(trauma.count = cti_ca_12_pa + cti_ca_12_sa + cti_ca_12_ea)
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE))
+
+# count severe cut-off (4) inkl dropouts
+trauma.CTI2 <- redcap.trauma.CTI.raw %>%
+  filter(redcap_event_name == "t1b_arm_1") %>%
+  dplyr::select(c(maternal_id, cti_ca_12_pa, cti_ca_12_sa, cti_ca_12_ea)) %>%
+  mutate(trauma.count = cti_ca_12_pa + cti_ca_12_sa + cti_ca_12_ea)
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE))
+```
+
+## check trauma type of dropouts
+```{r}
+dropout.trauma <- redcap.trauma.CTI.raw %>%
+  filter(redcap_event_name == "t1b_arm_1") %>%
+  dplyr::select(c(maternal_id, cti_ca_12_pa, cti_ca_12_pa_severity, cti_ca_12_sa, cti_ca_12_sa_severity, cti_ca_12_ea, cti_ca_12_ea_severity)) %>%
+  right_join(CT.dropouts, by = "maternal_id") %>%
+  mutate(trauma.count = cti_ca_12_pa + cti_ca_12_sa + cti_ca_12_ea)
+  summarize_all(~ sum(str_count(., "1"), na.rm=TRUE))
+  
+  
+```
+
+```{r}
+ct.ohne.trauma_CTI <- ct.participants %>%
+  left_join(trauma.CTI1)
+```
+
+# psychopathologies
+## get redcap
+```{r}
+redcap.psychopath.raw <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+fields = c("maternal_id",
+           "redcap_event_name"),
+forms = c("skid_i_diagnosenkodierung"),
+)$data  %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance")) %>%
+  dplyr::filter(.,!grepl("test|^2|^3|^4", maternal_id))
+```
+
+wir suchen für CT+ und CT-
+1. no psychopathology
+2. current depression
+3. depression in past
+4. current PTSD
+5. PTSD in past (remission)
+6. current substance abuse
+7. past substance abuse
+8. history of eating disorder
+9. borderline PD
+
+## extract CT participants - dropout excluded
+```{r}
+CT.psychopath <- redcap.psychopath.raw %>% 
+  filter(redcap_event_name == "tm_arm_1") %>%
+  right_join(CT.excl.dropout, by = "maternal_id")
+
+colnames(CT.psychopath)
+```
+
+## depression - dropout excluded
+```{r}
+depression.current <- CT.psychopath %>% 
+  dplyr::select(maternal_id, CT.p, CT.m, CTmid, skidi_mde_derz, skidi_mde_frueh_followup) %>%
+  mutate(current.depression = ifelse(skidi_mde_derz == "3", "1", "0")) %>%
+  mutate(past.depression = ifelse(skidi_mde_frueh_followup == "3", "1", "0")) 
+```
+
+
+# ALLES NEU Psychopathology
+```{r}
+redcap.export <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+fields = c("maternal_id",
+           "redcap_event_name", 
+           "scidii_diag_borderline"),
+forms = c("participant_summary",
+  "skid_i_diagnosenkodierung"),
+)$data  %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance")) %>%
+  dplyr::filter(.,!grepl("test|^2|^3|^4", maternal_id))
+```
+
+## filter for CT participants and group them
+```{r}
+CT.group <- redcap.export %>%
+  mutate(CT.yn = ifelse(c(studyparticipation___2 %in% "1" |studyparticipation___4 %in% "1" ), "yes", "no")) %>%
+  mutate(CT.group = ifelse(c(studyparticipation_ct %in% "1" | 
+                               studyparticipation_k2h %in% "1"), "plus", 
+                           ifelse(c(studyparticipation_ct %in% "2" | 
+                                      studyparticipation_k2h %in% "2"), "minus",
+                                  ifelse(c(studyparticipation_ct %in% "3" | studyparticipation_k2h %in% "3"), "not eligible",
+                                         ifelse(studyparticipation_ct %in% "4", "mid", "0"))))) %>%
+  filter(CT.yn %in% "yes") %>%
+  dplyr::select(maternal_id, CT.yn, CT.group) %>%
+  right_join(redcap.export)
+  
+```
+
+## find dropouts before M6
+```{r}
+dropout.visit <- redcap.export %>% # variable IDs der Dropouts vor dem M6
+  mutate(dropout.visit = ifelse(dropout_whichvisit %in% "1", "T1a", 
+                                ifelse(dropout_whichvisit %in% "2", "T1b", 
+                                       ifelse(dropout_whichvisit %in% "3", "TM", 
+                                              ifelse(dropout_whichvisit %in% "4", "T2", 
+                                                     ifelse(dropout_whichvisit %in% "5", "T3",
+                                                            ifelse(dropout_whichvisit %in% "6", "M1", "dropout nach M6"))))))) %>%
+    dplyr::select(maternal_id,dropout.visit) %>%
+    group_by(maternal_id) %>%
+    slice_head(n=1) %>%
+    ungroup %>%
+  right_join(CT.group)
+
+```
+
+```{r}
+depression <- dropout.visit %>%
+  mutate(current.depression = ifelse(skidi_mde_derz == "3", "1", "0")) %>%
+  mutate(past.depression = ifelse(skidi_mde_frueh_followup == "3", "1", "0")) %>%
+  dplyr::select(maternal_id, CT.group, dropout.visit, current.depression, past.depression)
+  
+  
+```
+
+
+```{r}
+ptsd <- dropout.visit %>%
+  mutate(current.ptbs = ifelse(skidi_ptbs == "3", "1", "0")) %>%
+  mutate(ptbs.remission = ifelse(scidi_ptbs_remission == "0", "1", "0")) %>% # was heißt in remission? also 0 bestehend, 1 teil, 2 voll, 3 frühere
+  dplyr::select(maternal_id, CT.group, dropout.visit, current.ptbs, scidi_ptbs_remission, ptbs.remission)
+  
+  
+```
+
+```{r}
+essstoerung <- dropout.visit %>%
+  mutate(an = ifelse(skidi_an == "3", "1", "0")) %>%
+  mutate(bn = ifelse(skidi_bn == "3", "1", "0")) %>%
+  mutate(ess = ifelse(skidi_ess == "3", "1", "0")) %>% 
+  dplyr::select(maternal_id, CT.group, dropout.visit, an, bn, ess)
+  
+```
+
+```{r}
+borderline <- dropout.visit %>%
+  dplyr::select(maternal_id, CT.group, dropout.visit, scidii_diag_borderline)
+```
+
+
+```{r}
+anxiety <- dropout.visit %>%
+  mutate(panik = ifelse(skidi_panik == "3", "1", "0")) %>%
+  mutate(agaro = ifelse(skidi_agora == "3", "1", "0")) %>%
+  mutate(sozial = ifelse(skidi_soziale == "3", "1", "0")) %>% 
+  mutate(spez = ifelse(skidi_spezifische == "3", "1", "0")) %>%
+  mutate(gas = ifelse(skidi_gas == "3", "1", "0")) %>% 
+  mutate(angstnbb = ifelse(skidi_angstnnb == "3", "1", "0")) %>% 
+  dplyr::select(maternal_id, CT.group, dropout.visit, panik, agaro, sozial, spez, gas, angstnbb)
+```
+
+
+
+
+
+
+
+
+

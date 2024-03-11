@@ -1,0 +1,127 @@
+---
+title: "lazarides_entringer"
+author: "FG"
+date: "4 11 2022"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(REDCapR)
+library(gtools)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+library(writexl)
+library(ggsci)
+library(readr) # loads read_csv
+```
+age mom
+SES
+parity
+pregancy BMI
+weight T1, T2
+drugs
+psych diagnosis T1 (current + lifetime)
+körperliche erkrankungen T1
+SS-Komplikationen T1, T2
+
+```{r}
+redcap.CLSE <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+forms = c("d_bildung_und_beruf",
+          "f_einkommen",
+          "m_drogen",
+          "l_psychiatrische_vorgeschichte",
+          "k_medizinische_vorgeschichte_familie"),
+fields = c("maternal_id",
+           "age_atfirstvisit",
+           "gestationalage_week",
+           "gestationalage_day",
+           "gestationalage_total",
+           "a_drugtest",
+           "a_drugtest_pos_yn",
+           "a_drugtest_positive",
+           "i_parity",
+           "a_maternalweight",
+           "a_maternal_bmi",
+           "i_child1_pregcomplications",
+           "i_child2_pregcomplications",
+           "i_child3_pregcomplications",
+           "i_child4_pregcomplications",
+           "i_child5_pregcomplications"),
+)$data %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance")) %>%
+  dplyr::filter(.,!grepl("test|^2|^3|^4", maternal_id))
+
+```
+# 
+
+```{r}
+temp <- redcap.CLSE %>%
+  filter(redcap_event_name == "t1a_arm_1" | redcap_event_name == "t2a_arm_1") %>%
+  write.csv(.,"CL_SE_redcap_dataexport.csv", row.names = FALSE)
+
+```
+
+
+
+
+```{r}
+redcap.CLSE %>%
+  dplyr::select(i_child1_pregcomplications___0)
+  
+  
+  
+  mutate(Kind_1_Keine Komplikationen == i_child1_pregcomplications___0,
+         Kind_1_Schwangerschaftsdiabetes == i_child1_pregcomplications___1,
+         Kind_1_Bluthochdruck == i_child1_pregcomplications___2,
+         Kind_1_Präeklampsie == i_child1_pregcomplications___3,
+         Kind_1_Plazentainsuffizienz == i_child1_pregcomplications___4,
+         Kind_1_Muttermundschwäche == i_child1_pregcomplications___5,
+         Kind_1_Vorzeitige Wehen == i_child1_pregcomplications___6,
+         Kind_1_Vorzeitiger Blasensprung == i_child1_pregcomplications___7,
+         Kind_1_Vaginale Blutungen == i_child1_pregcomplications___8,
+         Kind_1_Infektion == i_child1_pregcomplications___9,
+         Kind_1_Anämie == i_child1_pregcomplications___10,
+         Kind_1_Oligohydramnion == i_child1_pregcomplications___11,
+         Kind_1_Hyperemesis gravidarum == i_child1_pregcomplications___12,
+         Kind_1_Keine Angabe == i_child1_pregcomplications___99,
+         kind_2_Keine Komplikationen == i_child1_pregcomplications___0,
+         kind_2_Schwangerschaftsdiabetes == i_child1_pregcomplications___1,
+         kind_2_Bluthochdruck == i_child1_pregcomplications___2,
+         kind_2_Präeklampsie == i_child1_pregcomplications___3,
+         kind_2_Plazentainsuffizienz == i_child1_pregcomplications___4,
+         kind_2_Muttermundschwäche == i_child1_pregcomplications___5,
+         kind_2_Vorzeitige Wehen == i_child1_pregcomplications___6,
+         kind_2_Vorzeitiger Blasensprung == i_child1_pregcomplications___7,
+         kind_2_Vaginale Blutungen == i_child1_pregcomplications___8,
+         kind_2_Infektion == i_child1_pregcomplications___9,
+         kind_2_Anämie == i_child1_pregcomplications___10,
+         kind_2_Oligohydramnion == i_child1_pregcomplications___11,
+         kind_2_Hyperemesis gravidarum == i_child1_pregcomplications___12,
+         kind_2_Keine Angabe == i_child1_pregcomplications___99
+```
+
+
+
+```{r}
+redcap.CLSE %>% 
+  dplyr::select(c(maternal_id,
+                  redcap_event_name,
+           birthdate,
+           hbr_birthdate,
+           i_parity,
+           a_maternalweight,
+           a_maternal_bmi,
+
+ #          i_child3_pregcomplications,
+  #         i_child4_pregcomplications,
+   #        i_child5_pregcomplications
+)) %>%
+  filter(redcap_event_name == "t1a_arm_1" | redcap_event_name == "t1b_arm_1" | redcap_event_name == "t2a_arm_1")
+```

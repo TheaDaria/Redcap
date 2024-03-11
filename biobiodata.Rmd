@@ -1,0 +1,51 @@
+---
+title: "REDCap2R"
+author: "FG"
+date: "28 9 2021"
+output: html_document
+---
+
+# use only when you start this script the first time. 
+```{r}
+install.packages("Rtools")
+install.packages("tidyr")
+install.packages("REDCapR")
+install.packages("gtools")
+install.packages("ggplot2")
+install.packages("dplyr")
+```
+
+
+```{r}
+library(tidyr)
+library(REDCapR)
+library(gtools)
+library(ggplot2)
+library(dplyr)
+```
+
+# read only the form fragen_zu_covid19_erkrankung und field maternal_id
+
+```{r}
+bio_data <- REDCapR:::redcap_read(
+batch_size = 30L,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+forms = (c("a_krperliche_untersuchung_blutentnahme","q_krperliche_untersuchung_kind")),
+fields = "maternal_id"
+)$data %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance"))
+
+```
+
+
+```{r}
+bia_data.filter <- bio_data %>% 
+  dplyr::filter(.,!grepl("test|^2", maternal_id)) #%>% 
+  dplyr::filter(.,!grepl("t1b|t3|m3|m9|m18", redcap_event_name))%>%
+  filter(if_any(-c(maternal_id, redcap_event_name, fragen_zu_covid19_erkrankung_complete), ~ !is.na(.))) %>%
+  write.csv2("output/all_covid_anything.csv", row.names = FALSE)
+```
+

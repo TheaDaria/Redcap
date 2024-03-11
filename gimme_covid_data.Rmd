@@ -1,0 +1,76 @@
+---
+title: "REDCap2R"
+author: "FG"
+date: "28 9 2021"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(REDCapR)
+library(gtools)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+```
+
+# read only the form fragen_zu_covid19_erkrankung und field maternal_id
+
+```{r}
+covid.form <- REDCapR:::redcap_read(
+batch_size = 20,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+forms = "fragen_zu_covid19_erkrankung",
+fields = "maternal_id"
+)$data %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance"))
+
+```
+
+
+```{r}
+covid.all <- covid.form %>% 
+  dplyr::filter(.,!grepl("test|^2", maternal_id)) %>% 
+  #dplyr::filter(.,!grepl("t1b|t3|m3|m9|m18", redcap_event_name))%>%
+  #filter(if_any(-c(maternal_id, redcap_event_name, fragen_zu_covid19_erkrankung_complete), ~ !is.na(.))) %>%
+  write.csv2("output/all_covid_anything.csv", row.names = FALSE)
+```
+
+```{r}
+covid.missing <- covid.form %>% 
+  dplyr::filter(.,!grepl("test|^2", maternal_id)) %>% 
+  #dplyr::filter(.,!grepl("t1b|t3|m3|m9|m18", redcap_event_name))%>%
+  filter(if_any(c(covid_parent_disease, cov_vacc, cov_vacc_1date,	cov_vacc_2nd,	cov_vacc_2date,	covid_child_disease), ~ is.na(.))) #%>%
+  write.csv2("output/missing_covid_data.csv", row.names = FALSE)
+```
+
+
+```{r}
+covid.function <- function(x) {
+  ifelse(!is.na(x), x, NA)
+}
+```
+
+
+```{r}
+b <- function(y) {
+  if(!is.na(y)){
+    covid.form3 <- covid.form %>%
+      mutate("covid_parent_disease_yn2" = y)) %>%
+  }
+}
+```
+
+```{r}
+
+for(i in 1:nrow(covid.form)) {
+  covid.form2 <- covid.form %>%
+  mutate("covid_parent_disease_yn" = covid.function(covid.form$covid_parent_disease)) %>%
+    dplyr::select(maternal_id, covid_parent_disease_yn)
+}
+  
+```
+

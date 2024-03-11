@@ -1,0 +1,95 @@
+---
+title: "REDCap2R"
+author: "FG"
+date: "28 9 2021"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(REDCapR)
+library(gtools)
+library(ggplot2)
+library(dplyr)
+```
+
+
+
+```{r}
+uri="https://redcap.charite.de/cru/api/"
+token='6FD30683ACBA439FA03060E3DEC67881'
+
+#Return only the form fragen_zu_covid19_erkrankung und field maternal_id
+
+datensatz <- REDCapR::redcap_read_oneshot(
+redcap_uri = uri,
+token = token,
+forms = "fragen_zu_covid19_erkrankung",
+fields = "maternal_id"
+)$data
+
+```
+
+# notizen für morgen
+# entweder: # mutate neue column # for each row # if any columns !NA # füge x in neue column # filter für rows with x in new column
+
+```{r}
+uri="https://redcap.charite.de/cru/api/"
+token='6FD30683ACBA439FA03060E3DEC67881'
+```
+
+# read only M12: child blood and saliva
+```{r}
+datensatz <- REDCapR::redcap_read_oneshot(
+redcap_uri = uri,
+token = token,
+events = "m12_arm_1",
+fields = c("maternal_id", "q_saliva_child", "q_blood_child") 
+)$data %>% 
+  dplyr::select("maternal_id", "q_saliva_child", "q_blood_child")
+
+speichel_m12 <- datensatz %>%
+  filter(q_saliva_child == "1")
+
+blut_m12 <- datensatz %>%
+  filter(q_blood_child== "1")
+
+```
+
+
+# read only the form fragen_zu_covid19_erkrankung und field maternal_id
+```{r}
+covid.form <- REDCapR:::redcap_read(
+batch_size = 50L,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+forms = "fragen_zu_covid19_erkrankung",
+fields = "maternal_id"
+)$data %>%
+  dplyr::select(-c("redcap_repeat_instrument", "redcap_repeat_instance"))
+
+```
+
+# read full redcap
+```{r}
+uri="https://redcap.charite.de/cru/api/"
+token='6FD30683ACBA439FA03060E3DEC67881'
+
+
+
+the_datensatz <- REDCapR:::redcap_read(
+batch_size = 50L,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = token,
+)$data
+ 
+```
+
+
+
+
+
