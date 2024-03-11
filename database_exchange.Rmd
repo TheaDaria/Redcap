@@ -1,0 +1,162 @@
+---
+title: "Database_exchange"
+author: "FG"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(REDCapR)
+library(gtools)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+uri="https://redcap.charite.de/cru/api/"
+meks_token='6FD30683ACBA439FA03060E3DEC67881'
+mb_token='F612C968DA7C512C99AF4147B1F757FE'
+```
+
+# download maternal pregnancy data from meks_ct (biosamples + physical assessment)
+```{r}
+meks_ct <- REDCapR:::redcap_read(
+batch_size = 30L,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = meks_token,
+forms = (c("a_krperliche_untersuchung_blutentnahme", "a_krperliche_untersuchung_ctkids2health", "a_krperliche_untersuchung")),
+fields = "maternal_id"
+)$data %>%
+  filter(maternal_id > 1399)
+```
+
+# download imminschutz data from meks_ct
+```{r}
+meks_ct.immun <- REDCapR:::redcap_read(
+batch_size = 30L,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = meks_token,
+forms = ("j_immunschutz"),
+fields = "maternal_id"
+)$data %>%
+  filter(maternal_id > 1399)
+```
+
+# download maternal pregnancy data from memobaby
+```{r}
+memobaby <- REDCapR:::redcap_read(
+batch_size = 30L,
+interbatch_delay = 0.5,
+continue_on_error = FALSE,
+redcap_uri = uri,
+token = mb_token,
+forms = (c("mutter_bioproben_und_ku", "mutter_blutentnahme", "blutentnahme_medikamente", "labor")),
+fields = "maternal_id"
+)$data %>%
+  filter(maternal_id > 1399)
+```
+
+# immunschutz from meks_ct
+```{r}
+meks_ct.immun %>%
+  filter(redcap_event_name == "t2a_arm_1")
+```
+
+
+```{r}
+meks_ct.t2 <- meks_ct %>%
+  filter(redcap_event_name == "t2a_arm_1") %>%
+  select(c(maternal_id, redcap_event_name, 
+           physicalexam_date, a_maternalweight, a_saliva, a_kids2hphysexam_date, 
+           # a_kids2hphysexam_date wird für a_saliva_date verwendet
+           a_stool, a_stool_date, a_physexam_note, 
+           a_physicalexam_blood_date, a_last_hb_value, a_blooddraw_yn, a_time_blooddraw,
+           a_bloodsamples_meks___1, a_bloodsamples_meks___2, a_bloodsamples_meks___3, a_bloodsamples_meks___4, a_bloodsamples_meks___5, a_bloodsamples_meks___0, 
+           a_last_meal, a_bloodpressure, a_currentbreastfeeding, 
+           a_phys_exam_infection_4weeks, a_phys_exam_infect_start, a_phys_exam_infect_end,
+           a_phys_exam_medication, a_phys_exam_med_count))
+```
+
+# MB-instrument: mutter_bioproben_und_ku 
+```{r}
+meks2mb.bio_ku <- meks_ct.t2 %>%
+  select(c(maternal_id, redcap_event_name, 
+           physicalexam_date, 
+           a_maternalweight, 
+           a_saliva, 
+           a_kids2hphysexam_date, # a_kids2hphysexam_date wird für a_saliva_date verwendet
+           a_stool, 
+           a_stool_date, 
+           a_physexam_note
+           )) %>%
+  
+  dplyr::rename(a_saliva_date = a_kids2hphysexam_date,
+                physicalexam_blood_date = a_physicalexam_blood_date
+                )
+```
+
+# MB-instrument: mutter_blutentnahme
+```{r}
+meks2mb.blood <- meks_ct.t2 %>%
+    select(c(maternal_id, redcap_event_name,
+           a_physicalexam_blood_date, 
+           a_last_hb_value, 
+           a_blooddraw_yn, 
+           a_time_blooddraw,
+           a_bloodsamples_meks___1, a_bloodsamples_meks___2, a_bloodsamples_meks___3, a_bloodsamples_meks___4, a_bloodsamples_meks___5, a_bloodsamples_meks___0, 
+           a_last_meal, 
+           a_bloodpressure, 
+           a_currentbreastfeeding, 
+           a_phys_exam_infection_4weeks, 
+           a_phys_exam_infect_start, 
+           a_phys_exam_infect_end,
+           a_phys_exam_medication, 
+           a_phys_exam_med_count
+           )) %>%
+  dplyr::rename(physicalexam_blood_date = a_physicalexam_blood_date,
+                last_hb_value = a_last_hb_value,
+                blooddraw_yn=a_blooddraw_yn,
+                time_blooddraw=a_time_blooddraw,
+                bloodsamples___1=a_bloodsamples_meks___1,
+                bloodsamples___2=a_bloodsamples_meks___2,
+                bloodsamples___3=a_bloodsamples_meks___3,
+                bloodsamples___4=a_bloodsamples_meks___4,
+                bloodsamples___5=a_bloodsamples_meks___5,
+                bloodsamples___0=a_bloodsamples_meks___0,
+                last_meal=a_last_meal,
+                bloodpressure=a_bloodpressure,
+                currentbreastfeeding=a_currentbreastfeeding,
+                blood_infection_4weeks=a_phys_exam_infection_4weeks,
+                blood_infect_start=a_phys_exam_infect_start,
+                blood_infect_end=a_phys_exam_infect_end,
+                blood_medication=a_phys_exam_medication,
+                blood_med_count=a_phys_exam_med_count
+                )
+```
+
+
+# meks_ct medication during pregnancy wird in memobaby anders codiert, darum hier separat 
+```{r}
+meks_ct.t2.meds <- meks_ct %>%
+  filter(redcap_event_name == "t2a_arm_1") %>%
+  select(c(maternal_id, redcap_event_name, 
+           a_phys_exam_med1_name, a_phys_exam_med2_name, a_phys_exam_med3_name, a_phys_exam_med4_name,
+           a_phys_exam_med1_dose, a_phys_exam_med2_dose, a_phys_exam_med3_dose, a_phys_exam_med4_dose,
+           a_phys_exam_med1_type, a_phys_exam_med2_type, a_phys_exam_med3_type, a_phys_exam_med4_type))
+  
+```
+
+# meks_ct hat maternal hight in T1 erhoben
+```{r}
+meks_ct.t1 <- meks_ct %>%
+  filter(redcap_event_name == "t1a_arm_1") %>%
+  select(c(maternal_id, redcap_event_name, a_maternalheight))
+```
+
+
+
